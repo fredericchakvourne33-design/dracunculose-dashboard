@@ -27,12 +27,222 @@ from sklearn.linear_model import PoissonRegressor
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-st.set_page_config(page_title="Surveillance Ver de Guinée - Tchad", page_icon="🐍", layout="wide")
+st.set_page_config(page_title="Surveillance Ver de Guinée - Tchad", page_icon="🩺", layout="wide")
 
 FENETRE_INCUBATION = (10, 14)   # periode d'incubation confirmee (mois)
 MOIS_2026 = pd.period_range("2026-01", "2026-12", freq="M")
 SEUIL_CAS_PROVINCE = 100        # en-dessous, pas assez d'historique pour une tendance fiable
 FENETRE_MODELE_MENSUEL = 24     # fenetre glissante retenue par backtest (voir notebooks)
+
+# ==========================================================================
+# IDENTITE VISUELLE
+# Palette et typographie inspirees des bulletins epidemiologiques officiels
+# (type "Relevé épidémiologique") plutot que d'un habillage generique de
+# tableau de bord.
+# ==========================================================================
+COULEUR_PRIMAIRE = "#0E4B47"      # sarcelle profond - institutionnel, sante publique
+COULEUR_PRIMAIRE_CLAIRE = "#DCEAE8"
+COULEUR_ACCENT = "#C68A2E"        # ocre - couleur d'alerte moderee, evoque le Sahel
+COULEUR_DANGER = "#A6301E"        # rouge brique - risque eleve
+COULEUR_SUCCES = "#3F7A5C"        # vert sauge - pas de risque signale
+COULEUR_ENCRE = "#1C2B27"
+COULEUR_FOND = "#F7F5F0"
+COULEUR_MUTEE = "#66716B"
+
+NUM_BULLETIN = "AIGW/TD-2026"
+
+
+def injecter_css():
+    st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+    html, body, [class*="css"] {{
+        font-family: 'IBM Plex Sans', sans-serif;
+        color: {COULEUR_ENCRE};
+    }}
+    .stApp {{ background-color: {COULEUR_FOND}; }}
+
+    section[data-testid="stSidebar"] {{
+        background-color: {COULEUR_PRIMAIRE};
+    }}
+    section[data-testid="stSidebar"] * {{
+        color: #F2F6F5 !important;
+    }}
+    section[data-testid="stSidebar"] .stTextInput input,
+    section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {{
+        background-color: rgba(255,255,255,0.08);
+        color: #F2F6F5 !important;
+        border-color: rgba(255,255,255,0.25);
+    }}
+
+    /* ---- Banniere bulletin ---- */
+    .bulletin-entete {{
+        border-top: 4px solid {COULEUR_PRIMAIRE};
+        border-bottom: 1px solid #D8D3C6;
+        padding: 0.6rem 0 0.9rem 0;
+        margin-bottom: 1.2rem;
+    }}
+    .bulletin-eyebrow {{
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        color: {COULEUR_MUTEE};
+        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+    }}
+    .bulletin-titre {{
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: {COULEUR_PRIMAIRE};
+        margin: 0.15rem 0 0.1rem 0;
+        line-height: 1.15;
+    }}
+    .bulletin-soustitre {{
+        font-size: 0.95rem;
+        color: {COULEUR_MUTEE};
+    }}
+
+    /* ---- Cartes indicateurs ---- */
+    .carte-kpi {{
+        background: #FFFFFF;
+        border-left: 4px solid {COULEUR_PRIMAIRE};
+        border-radius: 4px;
+        padding: 0.7rem 1rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }}
+    .carte-kpi .kpi-label {{
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: {COULEUR_MUTEE};
+    }}
+    .carte-kpi .kpi-valeur {{
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 1.7rem;
+        font-weight: 600;
+        color: {COULEUR_ENCRE};
+        line-height: 1.3;
+    }}
+
+    /* ---- En-tetes de section ---- */
+    .entete-section {{
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+        margin: 1.6rem 0 0.4rem 0;
+    }}
+    .entete-section .num {{
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: {COULEUR_ACCENT};
+    }}
+    .entete-section .titre {{
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: {COULEUR_PRIMAIRE};
+    }}
+    .entete-section hr {{
+        flex-grow: 1;
+        border: none;
+        border-top: 1px solid #D8D3C6;
+        margin: 0;
+    }}
+
+    /* ---- Alertes personnalisees ---- */
+    .alerte {{
+        border-left: 4px solid;
+        border-radius: 4px;
+        padding: 0.55rem 0.9rem;
+        margin-bottom: 0.5rem;
+        background: #FFFFFF;
+        font-size: 0.92rem;
+    }}
+    .alerte-eleve {{ border-color: {COULEUR_DANGER}; }}
+    .alerte-eleve .badge {{ color: {COULEUR_DANGER}; }}
+    .alerte-succes {{ border-color: {COULEUR_SUCCES}; }}
+    .alerte-succes .badge {{ color: {COULEUR_SUCCES}; }}
+    .alerte .badge {{
+        font-family: 'IBM Plex Mono', monospace;
+        font-weight: 600;
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-right: 0.4rem;
+    }}
+
+    .pied-page {{
+        font-size: 0.78rem;
+        color: {COULEUR_MUTEE};
+        border-top: 1px solid #D8D3C6;
+        padding-top: 0.7rem;
+        margin-top: 1.2rem;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def entete_bulletin(sous_titre):
+    from datetime import date
+    st.markdown(f"""
+    <div class="bulletin-entete">
+        <div class="bulletin-eyebrow">
+            <span>Système de surveillance épidémiologique — République du Tchad</span>
+            <span>Bulletin n° {NUM_BULLETIN} · {date.today().strftime('%d/%m/%Y')}</span>
+        </div>
+        <div class="bulletin-titre">🩺 Surveillance du ver de Guinée — infections animales</div>
+        <div class="bulletin-soustitre">{sous_titre}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def carte_kpi(label, valeur):
+    st.markdown(f"""
+    <div class="carte-kpi">
+        <div class="kpi-label">{label}</div>
+        <div class="kpi-valeur">{valeur}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def entete_section(numero, titre):
+    st.markdown(f"""
+    <div class="entete-section">
+        <span class="num">{numero}</span>
+        <span class="titre">{titre}</span>
+        <hr>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def alerte(niveau, html):
+    classe = "alerte-eleve" if niveau == "eleve" else ("alerte-succes" if niveau == "succes" else "alerte-eleve")
+    badge = "Risque élevé" if niveau == "eleve" else ("Aucune alerte" if niveau == "succes" else "")
+    st.markdown(f"""<div class="alerte {classe}"><span class="badge">{badge}</span>{html}</div>""",
+                unsafe_allow_html=True)
+
+
+PALETTE_GRAPHIQUES = {
+    "barres": COULEUR_PRIMAIRE,
+    "grille": "#D8D3C6",
+    "texte": COULEUR_ENCRE,
+}
+
+plt.rcParams.update({
+    "font.family": "DejaVu Sans",   # police serveur (les polices web ne s'appliquent qu'a l'interface HTML)
+    "axes.edgecolor": "#D8D3C6",
+    "axes.labelcolor": COULEUR_ENCRE,
+    "text.color": COULEUR_ENCRE,
+    "xtick.color": COULEUR_MUTEE,
+    "ytick.color": COULEUR_MUTEE,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "figure.facecolor": "none",
+    "axes.facecolor": "none",
+})
 
 
 # ==========================================================================
@@ -272,14 +482,14 @@ def prevoir_districts_2026(_panel, _modele):
 # ==========================================================================
 # INTERFACE
 # ==========================================================================
-st.title("🐍 Surveillance du ver de Guinée — Tableau de bord")
-st.caption(
-    "Système intelligent de surveillance et d'aide à la décision — infections animales, Tchad. "
-    "Analyse basée uniquement sur `Infections_Animales.csv`."
+injecter_css()
+entete_bulletin(
+    "Aide à la décision — prévision 2026 et priorisation de la surveillance "
+    "(analyse basée uniquement sur <code>Infections_Animales.csv</code>)"
 )
 
 with st.sidebar:
-    st.header("📂 Données")
+    st.markdown("### 📂 Données")
     fichier_televerse = st.file_uploader("Charger le fichier CSV", type=["csv"])
     chemin_par_defaut = st.text_input("…ou chemin local vers le fichier", value="Infections_Animales.csv")
 
@@ -294,9 +504,9 @@ except Exception as erreur:
     st.error(f"Erreur lors de la lecture du fichier : {erreur}")
     st.stop()
 
-st.sidebar.success(f"{len(df)} infections chargées ({df['ym'].min()} → {df['ym'].max()})")
+st.sidebar.markdown(f"✅ **{len(df)} infections** chargées  \n`{df['ym'].min()} → {df['ym'].max()}`")
 
-st.sidebar.header("🔎 Filtre")
+st.sidebar.markdown("### 🔎 Filtre")
 provinces_disponibles = sorted(df["province_n"].dropna().unique())
 province_choisie = st.sidebar.selectbox("Province", options=["Toutes"] + provinces_disponibles)
 
@@ -305,17 +515,27 @@ previsions_provinces, previsions_nationales = previsions_volume_2026(df, mois_hi
 panel_district, modele_district, metriques_district = entrainer_et_valider_district(df, mois_hist)
 previsions_districts = prevoir_districts_2026(panel_district, modele_district)
 
-st.divider()
+df_perimetre = df if province_choisie == "Toutes" else df[df.province_n == province_choisie]
+k1, k2, k3, k4 = st.columns(4)
+with k1:
+    carte_kpi("Infections (2022-2025)", f"{len(df_perimetre)}")
+with k2:
+    carte_kpi("Provinces", f"{df_perimetre['province_n'].nunique()}" if province_choisie == "Toutes" else province_choisie)
+with k3:
+    carte_kpi("Districts", f"{df_perimetre['district_n'].nunique()}")
+with k4:
+    carte_kpi("Villages", f"{df_perimetre['Village'].nunique()}")
+st.write("")
 
 # ==========================================================================
 # SECTION 1 - PREVISION 2026 : NOMBRE D'INFECTIONS
 # ==========================================================================
 if province_choisie == "Toutes":
-    st.subheader("📈 Prévision 2026 — total national")
+    entete_section("01", "Prévision 2026 — total national")
     serie_affichee = previsions_nationales.set_index("ym")["total_national"]
     titre_graph = "Nombre d'infections prévu par mois — toutes provinces (2026)"
 else:
-    st.subheader(f"📈 Prévision 2026 — {province_choisie}")
+    entete_section("01", f"Prévision 2026 — {province_choisie}")
     serie_affichee = (
         previsions_provinces[previsions_provinces.province == province_choisie]
         .set_index("ym")["prediction"]
@@ -325,14 +545,16 @@ else:
 col1, col2 = st.columns([2, 1])
 with col1:
     fig, ax = plt.subplots(figsize=(9, 4))
-    ax.bar(serie_affichee.index.astype(str), serie_affichee.values, color="steelblue")
-    ax.set_title(titre_graph)
+    ax.bar(serie_affichee.index.astype(str), serie_affichee.values,
+           color=PALETTE_GRAPHIQUES["barres"], width=0.65, zorder=3)
+    ax.set_title(titre_graph, fontsize=11, fontweight="bold", color=COULEUR_ENCRE, loc="left")
     ax.set_ylabel("Cas prévus")
     ax.tick_params(axis="x", rotation=45)
-    ax.grid(alpha=0.3, axis="y")
-    st.pyplot(fig)
+    ax.grid(alpha=0.6, axis="y", color=PALETTE_GRAPHIQUES["grille"], zorder=0)
+    st.pyplot(fig, transparent=True)
 with col2:
-    st.metric("Total prévu 2026", f"{serie_affichee.sum():.0f} cas")
+    carte_kpi("Total prévu 2026", f"{serie_affichee.sum():.0f} cas")
+    st.write("")
     st.dataframe(serie_affichee.rename("Cas prévus").round(1), use_container_width=True)
 
 st.caption(
@@ -341,14 +563,10 @@ st.caption(
     "cohérente d'une province à l'autre."
 )
 
-st.divider()
-
 # ==========================================================================
 # SECTION 2 - DISTRICTS A RISQUE EN 2026
 # ==========================================================================
-st.subheader(
-    "🚨 Districts à risque en 2026" + (f" — {province_choisie}" if province_choisie != "Toutes" else "")
-)
+entete_section("02", "Districts à risque en 2026" + (f" — {province_choisie}" if province_choisie != "Toutes" else ""))
 
 dist_filtre = previsions_districts.copy()
 if province_choisie != "Toutes":
@@ -376,11 +594,12 @@ else:
 
     a_risque = resume_district[resume_district["niveau"] == "Élevé"]
     if a_risque.empty:
-        st.success("Aucun district ne se distingue nettement pour 2026 avec les données actuelles.")
+        alerte("succes", "Aucun district ne se distingue nettement pour 2026 avec les données actuelles.")
     else:
         for district, ligne in a_risque.iterrows():
-            st.error(
-                f"🔴 **{district}** — score de risque moyen {ligne['risque_moyen_2026']:.3f}, "
+            alerte(
+                "eleve",
+                f"<b>{district}</b> — score de risque moyen {ligne['risque_moyen_2026']:.3f}, "
                 f"pic attendu en {ligne['mois_du_pic_de_risque']}."
             )
 
@@ -405,9 +624,11 @@ if metriques_district:
             f"{metriques_district['positifs_test']} réellement touchés — jamais vus à l'entraînement)."
         )
 
-st.divider()
-st.caption(
-    "Prévisions construites uniquement à partir de l'historique disponible (aucune donnée externe). "
-    "À utiliser comme aide à la priorisation, pas comme certitude — en particulier pour les districts "
-    "n'ayant jamais été touchés auparavant, plus difficiles à anticiper."
-)
+st.markdown(f"""
+<div class="pied-page">
+    Bulletin n° {NUM_BULLETIN} — Système intelligent de surveillance et d'aide à la décision, ver de Guinée, Tchad.
+    Prévisions construites uniquement à partir de l'historique disponible (aucune donnée externe).
+    À utiliser comme aide à la priorisation, pas comme certitude — en particulier pour les districts
+    n'ayant jamais été touchés auparavant, plus difficiles à anticiper.
+</div>
+""", unsafe_allow_html=True)
